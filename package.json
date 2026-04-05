@@ -1,19 +1,21 @@
 {
   "name": "dijital-foreman",
-  "main": "expo-router/entry",
+  "main": "App.js",
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint"
   },
   "dependencies": {
-    "@react-navigation/bottom-tabs": "^7.15.5",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-navigation/bottom-tabs": "^7.15.9",
     "@react-navigation/elements": "^2.9.10",
-    "@react-navigation/native": "^7.1.33",
+    "@react-navigation/native": "^7.2.2",
+    "@react-navigation/native-stack": "^7.14.10",
     "expo": "~55.0.11",
     "expo-constants": "~55.0.11",
     "expo-device": "~55.0.12",
@@ -21,6 +23,7 @@
     "expo-glass-effect": "~55.0.10",
     "expo-image": "~55.0.8",
     "expo-linking": "~55.0.11",
+    "expo-notifications": "~55.0.16",
     "expo-router": "~55.0.10",
     "expo-splash-screen": "~55.0.15",
     "expo-status-bar": "~55.0.5",
@@ -31,11 +34,11 @@
     "react-dom": "19.2.0",
     "react-native": "0.83.4",
     "react-native-gesture-handler": "~2.30.0",
-    "react-native-worklets": "0.7.2",
     "react-native-reanimated": "4.2.1",
     "react-native-safe-area-context": "~5.6.2",
     "react-native-screens": "~4.23.0",
-    "react-native-web": "~0.21.0"
+    "react-native-web": "~0.21.0",
+    "react-native-worklets": "0.7.2"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
