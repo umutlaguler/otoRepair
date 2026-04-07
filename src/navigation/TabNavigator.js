@@ -1,10 +1,9 @@
-import React from 'react';
-import { StyleSheet } from 'react-native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import HomeScreen from '../screens/HomeScreen';
-import NewRecordScreen from '../screens/NewRecordScreen';
-import HistoryScreen from '../screens/HistoryScreen';
-import { COLORS } from '../constants/colors';
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { StyleSheet } from "react-native";
+import { COLORS } from "../constants/colors";
+import HistoryScreen from "../screens/HistoryScreen";
+import HomeScreen from "../screens/HomeScreen";
+import NewRecordScreen from "../screens/NewRecordScreen";
 
 const Tab = createBottomTabNavigator();
 
@@ -15,7 +14,7 @@ export default function TabNavigator() {
         headerShown: false,
         tabBarStyle: styles.tabBar,
         tabBarShowLabel: true,
-        tabBarIconStyle: { display: 'none' },
+        tabBarIconStyle: { display: "none" },
         tabBarLabelStyle: styles.tabLabel,
         tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: COLORS.textSecondary,
@@ -26,7 +25,7 @@ export default function TabNavigator() {
         name="Home"
         component={HomeScreen}
         options={{
-          tabBarLabel: 'Ana Sayfa',
+          tabBarLabel: "Ana Sayfa",
           tabBarActiveBackgroundColor: COLORS.primarySoft,
         }}
       />
@@ -35,7 +34,7 @@ export default function TabNavigator() {
         name="NewRecord"
         component={NewRecordScreen}
         options={{
-          tabBarLabel: '+ Yeni Kayit',
+          tabBarLabel: "+ Yeni Kayit",
           tabBarActiveBackgroundColor: COLORS.primarySoft,
         }}
       />
@@ -44,7 +43,7 @@ export default function TabNavigator() {
         name="History"
         component={HistoryScreen}
         options={{
-          tabBarLabel: 'Gecmis',
+          tabBarLabel: "Gecmis",
           tabBarActiveBackgroundColor: COLORS.primarySoft,
         }}
       />
@@ -62,7 +61,7 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.border,
     borderTopWidth: 1,
     elevation: 8,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.06,
     shadowRadius: 6,
@@ -74,7 +73,7 @@ const styles = StyleSheet.create({
   },
   tabLabel: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 0.3,
   },
 });

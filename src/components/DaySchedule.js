@@ -1,48 +1,79 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { usePostHog } from "posthog-react-native";
+import { useEffect, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  TextInput,
+  Alert,
+  KeyboardAvoidingView,
   Modal,
-} from 'react-native';
-import { COLORS } from '../constants/colors';
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { COLORS } from "../constants/colors";
 import {
-  getAppointmentsByDate,
   addAppointment,
+  getAppointmentsByDate,
   removeAppointment,
-} from '../storage/recordStorage';
-import { scheduleAppointmentNotification } from '../utils/notifications';
+} from "../storage/recordStorage";
+import { scheduleAppointmentNotification } from "../utils/notifications";
 
 const WORK_HOURS = [
-  '08:00', '09:00', '10:00', '11:00', '12:00',
-  '13:00', '14:00', '15:00', '16:00', '17:00', '18:00',
+  "08:00",
+  "09:00",
+  "10:00",
+  "11:00",
+  "12:00",
+  "13:00",
+  "14:00",
+  "15:00",
+  "16:00",
+  "17:00",
+  "18:00",
 ];
 
 // Randevulari birbirinden ayirmak icin renk paleti
 const APPT_COLORS = [
-  { bg: '#DCE6FF', border: '#0D47A1', text: '#0D47A1', dot: '#0D47A1' },  // mavi
-  { bg: '#FDECD0', border: '#E65100', text: '#E65100', dot: '#E65100' },  // turuncu
-  { bg: '#D4EDDA', border: '#16A34A', text: '#16A34A', dot: '#16A34A' },  // yesil
-  { bg: '#F8D7DA', border: '#DC2626', text: '#DC2626', dot: '#DC2626' },  // kirmizi
-  { bg: '#E8DAEF', border: '#7B2D8E', text: '#7B2D8E', dot: '#7B2D8E' },  // mor
-  { bg: '#D6EAF8', border: '#1A73E8', text: '#1A73E8', dot: '#1A73E8' },  // acik mavi
+  { bg: "#DCE6FF", border: "#0D47A1", text: "#0D47A1", dot: "#0D47A1" }, // mavi
+  { bg: "#FDECD0", border: "#E65100", text: "#E65100", dot: "#E65100" }, // turuncu
+  { bg: "#D4EDDA", border: "#16A34A", text: "#16A34A", dot: "#16A34A" }, // yesil
+  { bg: "#F8D7DA", border: "#DC2626", text: "#DC2626", dot: "#DC2626" }, // kirmizi
+  { bg: "#E8DAEF", border: "#7B2D8E", text: "#7B2D8E", dot: "#7B2D8E" }, // mor
+  { bg: "#D6EAF8", border: "#1A73E8", text: "#1A73E8", dot: "#1A73E8" }, // acik mavi
 ];
 
-const DAYS_TR = ['Pazar', 'Pazartesi', 'Sali', 'Carsamba', 'Persembe', 'Cuma', 'Cumartesi'];
+const DAYS_TR = [
+  "Pazar",
+  "Pazartesi",
+  "Sali",
+  "Carsamba",
+  "Persembe",
+  "Cuma",
+  "Cumartesi",
+];
 const MONTHS_TR = [
-  'Ocak', 'Subat', 'Mart', 'Nisan', 'Mayis', 'Haziran',
-  'Temmuz', 'Agustos', 'Eylul', 'Ekim', 'Kasim', 'Aralik',
+  "Ocak",
+  "Subat",
+  "Mart",
+  "Nisan",
+  "Mayis",
+  "Haziran",
+  "Temmuz",
+  "Agustos",
+  "Eylul",
+  "Ekim",
+  "Kasim",
+  "Aralik",
 ];
 
 function getDateStr(offset = 0) {
   const d = new Date();
   d.setDate(d.getDate() + offset);
   const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
@@ -61,9 +92,10 @@ export default function DaySchedule() {
   const [dayOffset, setDayOffset] = useState(0);
   const [appointments, setAppointments] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [selectedHour, setSelectedHour] = useState('09:00');
+  const [newName, setNewName] = useState("");
+  const [selectedHour, setSelectedHour] = useState("09:00");
   const scrollRef = useRef(null);
+  const posthog = usePostHog();
 
   const dateStr = getDateStr(dayOffset);
 
@@ -82,20 +114,46 @@ export default function DaySchedule() {
       customerName: newName.trim(),
       time: selectedHour,
     });
+    posthog?.capture("appointment_created", {
+      date: dateStr,
+      time: selectedHour,
+      customer_name: newName.trim(),
+    });
     // Randevudan 30dk once bildirim zamanla
     await scheduleAppointmentNotification(
       dateStr,
       selectedHour,
       newName.trim(),
-      Date.now().toString()
+      Date.now().toString(),
     );
-    setNewName('');
+    setNewName("");
     setModalVisible(false);
     loadAppointments();
   }
 
+  function confirmRemove(appt) {
+    Alert.alert(
+      "Randevu Silinecek",
+      `${appt.customerName} - ${appt.time} randevusunu silmek istediginizden emin misiniz?`,
+      [
+        { text: "Hayir", style: "cancel" },
+        {
+          text: "Evet, Sil",
+          style: "destructive",
+          onPress: () => handleRemove(appt.id),
+        },
+      ],
+    );
+  }
+
   async function handleRemove(id) {
+    const removedAppt = appointments.find((a) => a.id === id);
     await removeAppointment(dateStr, id);
+    posthog?.capture("appointment_deleted", {
+      date: dateStr,
+      time: removedAppt?.time,
+      customer_name: removedAppt?.customerName,
+    });
     loadAppointments();
   }
 
@@ -128,8 +186,13 @@ export default function DaySchedule() {
           disabled={dayOffset === 0}
           activeOpacity={0.6}
         >
-          <Text style={[styles.navArrow, dayOffset === 0 && styles.navArrowDisabled]}>
-            {'<'}
+          <Text
+            style={[
+              styles.navArrow,
+              dayOffset === 0 && styles.navArrowDisabled,
+            ]}
+          >
+            {"<"}
           </Text>
         </TouchableOpacity>
 
@@ -137,8 +200,12 @@ export default function DaySchedule() {
           <Text style={styles.dayLabel}>{getDateLabel(dayOffset)}</Text>
         </View>
 
-        <TouchableOpacity onPress={goNext} style={styles.navBtn} activeOpacity={0.6}>
-          <Text style={styles.navArrow}>{'>'}</Text>
+        <TouchableOpacity
+          onPress={goNext}
+          style={styles.navBtn}
+          activeOpacity={0.6}
+        >
+          <Text style={styles.navArrow}>{">"}</Text>
         </TouchableOpacity>
       </View>
 
@@ -169,10 +236,15 @@ export default function DaySchedule() {
                               borderLeftColor: color.border,
                             },
                           ]}
-                          onLongPress={() => handleRemove(appt.id)}
+                          onLongPress={() => confirmRemove(appt)}
                           activeOpacity={0.7}
                         >
-                          <View style={[styles.apptDot, { backgroundColor: color.dot }]} />
+                          <View
+                            style={[
+                              styles.apptDot,
+                              { backgroundColor: color.dot },
+                            ]}
+                          />
                           <Text
                             style={[styles.apptName, { color: color.text }]}
                             numberOfLines={1}
@@ -204,72 +276,89 @@ export default function DaySchedule() {
 
       {/* Randevu ekleme modali */}
       <Modal visible={modalVisible} transparent animationType="fade">
-        <TouchableOpacity
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setModalVisible(false)}
         >
-          <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Randevu Ekle</Text>
-            <Text style={styles.modalSubtitle}>{getDateLabel(dayOffset)}</Text>
+          <TouchableOpacity
+            style={styles.modalOverlayInner}
+            activeOpacity={1}
+            onPress={() => setModalVisible(false)}
+          >
+            <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+                keyboardShouldPersistTaps="handled"
+              >
+                <Text style={styles.modalTitle}>Randevu Ekle</Text>
+                <Text style={styles.modalSubtitle}>
+                  {getDateLabel(dayOffset)}
+                </Text>
 
-            <Text style={styles.modalLabel}>Musteri Adi</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Ad Soyad"
-              placeholderTextColor={COLORS.gray}
-              value={newName}
-              onChangeText={setNewName}
-              autoFocus
-            />
+                <Text style={styles.modalLabel}>Musteri Adi</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Ad Soyad"
+                  placeholderTextColor={COLORS.gray}
+                  value={newName}
+                  onChangeText={setNewName}
+                  autoFocus
+                />
 
-            <Text style={styles.modalLabel}>Saat</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.hourPicker}
-            >
-              {WORK_HOURS.map((hour) => (
-                <TouchableOpacity
-                  key={hour}
-                  style={[
-                    styles.hourChip,
-                    selectedHour === hour && styles.hourChipActive,
-                  ]}
-                  onPress={() => setSelectedHour(hour)}
-                  activeOpacity={0.7}
+                <Text style={styles.modalLabel}>Saat</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.hourPicker}
+                  keyboardShouldPersistTaps="handled"
                 >
-                  <Text
-                    style={[
-                      styles.hourChipText,
-                      selectedHour === hour && styles.hourChipTextActive,
-                    ]}
-                  >
-                    {hour}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+                  {WORK_HOURS.map((hour) => (
+                    <TouchableOpacity
+                      key={hour}
+                      style={[
+                        styles.hourChip,
+                        selectedHour === hour && styles.hourChipActive,
+                      ]}
+                      onPress={() => setSelectedHour(hour)}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.hourChipText,
+                          selectedHour === hour && styles.hourChipTextActive,
+                        ]}
+                      >
+                        {hour}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
 
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.modalCancel}
-                onPress={() => setModalVisible(false)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.modalCancelText}>Vazgec</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalSave, !newName.trim() && styles.modalSaveDisabled]}
-                onPress={handleAddAppointment}
-                disabled={!newName.trim()}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.modalSaveText}>Ekle</Text>
-              </TouchableOpacity>
-            </View>
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={styles.modalCancel}
+                    onPress={() => setModalVisible(false)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.modalCancelText}>Vazgec</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.modalSave,
+                      !newName.trim() && styles.modalSaveDisabled,
+                    ]}
+                    onPress={handleAddAppointment}
+                    disabled={!newName.trim()}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.modalSaveText}>Ekle</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </TouchableOpacity>
           </TouchableOpacity>
-        </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -279,12 +368,12 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: COLORS.card,
     borderRadius: 20,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   dayNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 6,
     paddingTop: 12,
     paddingBottom: 10,
@@ -296,15 +385,15 @@ const styles = StyleSheet.create({
     height: 42,
     borderRadius: 12,
     backgroundColor: COLORS.lightGray,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   navBtnDisabled: {
     opacity: 0.3,
   },
   navArrow: {
     fontSize: 22,
-    fontWeight: '700',
+    fontWeight: "700",
     color: COLORS.primary,
   },
   navArrowDisabled: {
@@ -312,22 +401,22 @@ const styles = StyleSheet.create({
   },
   dayLabelContainer: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: "center",
     paddingHorizontal: 8,
   },
   dayLabel: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: "700",
     color: COLORS.text,
-    textAlign: 'center',
+    textAlign: "center",
   },
   timelineScroll: {
     maxHeight: 200,
     paddingHorizontal: 14,
   },
   timeSlot: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     minHeight: 36,
     paddingVertical: 3,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -336,7 +425,7 @@ const styles = StyleSheet.create({
   timeText: {
     width: 46,
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
     color: COLORS.textSecondary,
     paddingTop: 6,
   },
@@ -348,13 +437,13 @@ const styles = StyleSheet.create({
     height: 28,
   },
   apptRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 6,
   },
   appointmentChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -370,7 +459,7 @@ const styles = StyleSheet.create({
   },
   apptName: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: "700",
     flex: 1,
   },
   addButton: {
@@ -379,34 +468,37 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 2,
     borderColor: COLORS.primary,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
   },
   addButtonText: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: "700",
     color: COLORS.primary,
   },
 
   // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  modalOverlayInner: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
     padding: 24,
   },
   modalContent: {
     backgroundColor: COLORS.card,
     borderRadius: 24,
     padding: 24,
-    width: '100%',
+    width: "100%",
     maxWidth: 400,
   },
   modalTitle: {
     fontSize: 22,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.text,
   },
   modalSubtitle: {
@@ -417,11 +509,11 @@ const styles = StyleSheet.create({
   },
   modalLabel: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: "700",
     color: COLORS.textSecondary,
     letterSpacing: 1,
     marginBottom: 8,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   modalInput: {
     backgroundColor: COLORS.lightGray,
@@ -442,21 +534,21 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.lightGray,
     marginRight: 8,
     minWidth: 70,
-    alignItems: 'center',
+    alignItems: "center",
   },
   hourChipActive: {
     backgroundColor: COLORS.primary,
   },
   hourChipText: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
     color: COLORS.text,
   },
   hourChipTextActive: {
     color: COLORS.white,
   },
   modalButtons: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
   },
   modalCancel: {
@@ -464,12 +556,12 @@ const styles = StyleSheet.create({
     height: 54,
     borderRadius: 14,
     backgroundColor: COLORS.lightGray,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   modalCancelText: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
     color: COLORS.text,
   },
   modalSave: {
@@ -477,15 +569,15 @@ const styles = StyleSheet.create({
     height: 54,
     borderRadius: 14,
     backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   modalSaveDisabled: {
     opacity: 0.4,
   },
   modalSaveText: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.white,
   },
 });

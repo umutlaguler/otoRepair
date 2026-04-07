@@ -1,31 +1,34 @@
-import React, { useState, useCallback } from 'react';
+import { useFocusEffect } from "@react-navigation/native";
+import { usePostHog } from "posthog-react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
   ScrollView,
-  FlatList,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
-import { COLORS } from '../constants/colors';
-import { getAllRecords } from '../storage/recordStorage';
-import { getTodayString } from '../utils/date';
-import { formatPrice } from '../utils/currency';
-import SearchBar from '../components/SearchBar';
-import SectionTitle from '../components/SectionTitle';
-import RecordCard from '../components/RecordCard';
-import DaySchedule from '../components/DaySchedule';
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import DaySchedule from "../components/DaySchedule";
+import RecordCard from "../components/RecordCard";
+import SearchBar from "../components/SearchBar";
+import SectionTitle from "../components/SectionTitle";
+import { COLORS } from "../constants/colors";
+import { getAllRecords } from "../storage/recordStorage";
+import { formatPrice } from "../utils/currency";
+import { getTodayString } from "../utils/date";
 
 export default function HomeScreen({ navigation }) {
   const [records, setRecords] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
+  const posthog = usePostHog();
+  const searchTimerRef = useRef(null);
 
   useFocusEffect(
     useCallback(() => {
       loadRecords();
-    }, [])
+      posthog?.screen("HomeScreen");
+    }, []),
   );
 
   async function loadRecords() {
@@ -38,10 +41,13 @@ export default function HomeScreen({ navigation }) {
   // Gunluk kazanc hesapla
   const todayStr = getTodayString();
   const todayRecords = records.filter((r) => r.date === todayStr);
-  const todayTotal = todayRecords.reduce((sum, r) => sum + (r.totalAmount || 0), 0);
+  const todayTotal = todayRecords.reduce(
+    (sum, r) => sum + (r.totalAmount || 0),
+    0,
+  );
   const todayCollected = todayRecords.reduce((sum, r) => {
-    if (r.paymentStatus === 'paid') return sum + (r.totalAmount || 0);
-    if (r.paymentStatus === 'partial') return sum + (r.paidAmount || 0);
+    if (r.paymentStatus === "paid") return sum + (r.totalAmount || 0);
+    if (r.paymentStatus === "partial") return sum + (r.paidAmount || 0);
     return sum;
   }, 0);
   const todayPending = todayTotal - todayCollected;
@@ -52,13 +58,33 @@ export default function HomeScreen({ navigation }) {
         (r) =>
           r.plate.toLowerCase().includes(searchQuery.toLowerCase()) ||
           r.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          r.customerPhone.includes(searchQuery)
+          r.customerPhone.includes(searchQuery),
       )
     : [];
 
+  // Arama yapildiginda PostHog event'i gonder (debounced)
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    if (searchQuery.trim().length >= 2) {
+      searchTimerRef.current = setTimeout(() => {
+        posthog?.capture("search_performed", {
+          screen: "HomeScreen",
+          query: searchQuery.trim(),
+          results_count: filteredRecords.length,
+        });
+      }, 1000);
+    }
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, [searchQuery]);
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Baslik */}
         <Text style={styles.headerTitle}>AL-AZ OTOMOTIV</Text>
 
@@ -70,7 +96,7 @@ export default function HomeScreen({ navigation }) {
         />
 
         {/* Arama sonuclari */}
-        {searchQuery.trim() !== '' && (
+        {searchQuery.trim() !== "" && (
           <View style={styles.searchResults}>
             {filteredRecords.length > 0 ? (
               filteredRecords.slice(0, 5).map((record) => (
@@ -78,13 +104,15 @@ export default function HomeScreen({ navigation }) {
                   key={record.id}
                   style={styles.searchResultItem}
                   onPress={() => {
-                    setSearchQuery('');
-                    navigation.navigate('RecordDetail', { record });
+                    setSearchQuery("");
+                    navigation.navigate("RecordDetail", { record });
                   }}
                   activeOpacity={0.6}
                 >
                   <Text style={styles.searchResultPlate}>{record.plate}</Text>
-                  <Text style={styles.searchResultName}>{record.customerName}</Text>
+                  <Text style={styles.searchResultName}>
+                    {record.customerName}
+                  </Text>
                 </TouchableOpacity>
               ))
             ) : (
@@ -101,17 +129,27 @@ export default function HomeScreen({ navigation }) {
           <Text style={styles.earningsTotal}>{formatPrice(todayTotal)} TL</Text>
           <View style={styles.earningsRow}>
             <View style={styles.earningsItem}>
-              <View style={[styles.earningsDot, { backgroundColor: COLORS.green }]} />
+              <View
+                style={[styles.earningsDot, { backgroundColor: COLORS.green }]}
+              />
               <Text style={styles.earningsLabel}>Tahsil Edilen</Text>
-              <Text style={[styles.earningsValue, { color: COLORS.green }]}>{formatPrice(todayCollected)} TL</Text>
+              <Text style={[styles.earningsValue, { color: COLORS.green }]}>
+                {formatPrice(todayCollected)} TL
+              </Text>
             </View>
             <View style={styles.earningsItem}>
-              <View style={[styles.earningsDot, { backgroundColor: COLORS.red }]} />
+              <View
+                style={[styles.earningsDot, { backgroundColor: COLORS.red }]}
+              />
               <Text style={styles.earningsLabel}>Bekleyen</Text>
-              <Text style={[styles.earningsValue, { color: COLORS.red }]}>{formatPrice(todayPending)} TL</Text>
+              <Text style={[styles.earningsValue, { color: COLORS.red }]}>
+                {formatPrice(todayPending)} TL
+              </Text>
             </View>
           </View>
-          <Text style={styles.earningsCount}>{todayRecords.length} islem yapildi</Text>
+          <Text style={styles.earningsCount}>
+            {todayRecords.length} islem yapildi
+          </Text>
         </View>
 
         {/* Gunluk Takvim */}
@@ -122,7 +160,7 @@ export default function HomeScreen({ navigation }) {
         <SectionTitle
           title="Son Kayitlar"
           actionText="Hepsini Gor"
-          onAction={() => navigation.navigate('History')}
+          onAction={() => navigation.navigate("History")}
           style={{ marginTop: 6 }}
         />
 
@@ -132,7 +170,7 @@ export default function HomeScreen({ navigation }) {
               key={record.id}
               record={record}
               compact
-              onPress={() => navigation.navigate('RecordDetail', { record })}
+              onPress={() => navigation.navigate("RecordDetail", { record })}
             />
           ))
         ) : (
@@ -158,7 +196,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 26,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.text,
     marginTop: 4,
   },
@@ -168,7 +206,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.card,
     borderRadius: 14,
     marginTop: -6,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   searchResultItem: {
     padding: 16,
@@ -177,7 +215,7 @@ const styles = StyleSheet.create({
   },
   searchResultPlate: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.primary,
   },
   searchResultName: {
@@ -188,7 +226,7 @@ const styles = StyleSheet.create({
   searchNoResult: {
     fontSize: 14,
     color: COLORS.textSecondary,
-    textAlign: 'center',
+    textAlign: "center",
   },
 
   // Bos
@@ -196,7 +234,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.card,
     borderRadius: 16,
     padding: 24,
-    alignItems: 'center',
+    alignItems: "center",
   },
   emptyText: {
     fontSize: 15,
@@ -213,27 +251,27 @@ const styles = StyleSheet.create({
   },
   earningsTitle: {
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.textSecondary,
     letterSpacing: 0.5,
   },
   earningsTotal: {
     fontSize: 32,
-    fontWeight: '900',
+    fontWeight: "900",
     color: COLORS.primary,
     marginTop: 6,
   },
   earningsRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 16,
     marginTop: 14,
   },
   earningsItem: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
-    flexWrap: 'wrap',
+    flexWrap: "wrap",
   },
   earningsDot: {
     width: 10,
@@ -243,11 +281,11 @@ const styles = StyleSheet.create({
   earningsLabel: {
     fontSize: 13,
     color: COLORS.textSecondary,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   earningsValue: {
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   earningsCount: {
     fontSize: 13,

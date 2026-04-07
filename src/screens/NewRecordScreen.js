@@ -1,51 +1,105 @@
-import React, { useState } from 'react';
+import { usePostHog } from "posthog-react-native";
+import { useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
   Alert,
   KeyboardAvoidingView,
-  Platform,
   Modal,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS } from '../constants/colors';
-import { QUICK_SERVICES } from '../constants/mockData';
-import { addRecord } from '../storage/recordStorage';
-import { formatPrice } from '../utils/currency';
-import { getTodayString } from '../utils/date';
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { COLORS } from "../constants/colors";
+import { QUICK_SERVICES } from "../constants/mockData";
+import { addRecord, updateRecord } from "../storage/recordStorage";
+import { formatPrice } from "../utils/currency";
+import { getTodayString } from "../utils/date";
 
 export default function NewRecordScreen({ navigation, route }) {
   const prefill = route?.params?.prefillCustomer;
+  const editRecord = route?.params?.editRecord;
+  const isEditMode = !!editRecord;
+  const posthog = usePostHog();
 
-  const [customerName, setCustomerName] = useState(prefill?.customerName || '');
-  const [customerPhone, setCustomerPhone] = useState(prefill?.customerPhone || '');
-  const [plate, setPlate] = useState(prefill?.plate || '');
-  const [brand, setBrand] = useState(prefill?.brand || '');
-  const [model, setModel] = useState(prefill?.model || '');
-  const [year, setYear] = useState(prefill?.year || '');
-  const [kilometer, setKilometer] = useState('');
-  const [items, setItems] = useState([]);
-  const [oilBrand, setOilBrand] = useState('');
-  const [oilViscosity, setOilViscosity] = useState('');
-  const [notes, setNotes] = useState('');
+  const [customerName, setCustomerName] = useState(
+    editRecord?.customerName || prefill?.customerName || "",
+  );
+  const [customerPhone, setCustomerPhone] = useState(
+    editRecord?.customerPhone || prefill?.customerPhone || "",
+  );
+  const [plate, setPlate] = useState(editRecord?.plate || prefill?.plate || "");
+  const [brand, setBrand] = useState(editRecord?.brand || prefill?.brand || "");
+  const [model, setModel] = useState(editRecord?.model || prefill?.model || "");
+  const [year, setYear] = useState(editRecord?.year || prefill?.year || "");
+  const [kilometer, setKilometer] = useState(editRecord?.kilometer || "");
+  const [items, setItems] = useState(
+    editRecord?.services
+      ? editRecord.services.map((s) => ({ name: s.name, price: s.price || 0 }))
+      : [],
+  );
+  const [oilBrand, setOilBrand] = useState(editRecord?.oilBrand || "");
+  const [oilViscosity, setOilViscosity] = useState(
+    editRecord?.oilViscosity || "",
+  );
+  const [notes, setNotes] = useState(editRecord?.notes || "");
   const [saving, setSaving] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState('paid');
-  const [paidAmount, setPaidAmount] = useState('');
+  const [paymentStatus, setPaymentStatus] = useState(
+    editRecord?.paymentStatus || "paid",
+  );
+  const [paidAmount, setPaidAmount] = useState(
+    editRecord?.paidAmount ? String(editRecord.paidAmount) : "",
+  );
 
   // Modal state - kalem ekleme
   const [addModalVisible, setAddModalVisible] = useState(false);
-  const [editItemName, setEditItemName] = useState('');
-  const [editItemPrice, setEditItemPrice] = useState('');
+  const [editItemName, setEditItemName] = useState("");
+  const [editItemPrice, setEditItemPrice] = useState("");
 
   const totalAmount = items.reduce((sum, i) => sum + (i.price || 0), 0);
 
-  function openAddModal(presetName = '') {
+  function clearForm() {
+    setCustomerName("");
+    setCustomerPhone("");
+    setPlate("");
+    setBrand("");
+    setModel("");
+    setYear("");
+    setKilometer("");
+    setItems([]);
+    setOilBrand("");
+    setOilViscosity("");
+    setNotes("");
+    setPaymentStatus("paid");
+    setPaidAmount("");
+  }
+
+  function handleClearForm() {
+    const hasData =
+      customerName ||
+      customerPhone ||
+      plate ||
+      brand ||
+      model ||
+      year ||
+      kilometer ||
+      items.length > 0 ||
+      oilBrand ||
+      oilViscosity ||
+      notes;
+    if (!hasData) return;
+    Alert.alert("Formu Temizle", "Tum alanlari temizlemek istiyor musunuz?", [
+      { text: "Vazgec", style: "cancel" },
+      { text: "Temizle", style: "destructive", onPress: clearForm },
+    ]);
+  }
+
+  function openAddModal(presetName = "") {
     setEditItemName(presetName);
-    setEditItemPrice('');
+    setEditItemPrice("");
     setAddModalVisible(true);
   }
 
@@ -54,14 +108,14 @@ export default function NewRecordScreen({ navigation, route }) {
     const price = parseInt(editItemPrice) || 0;
     setItems([...items, { name: editItemName.trim(), price }]);
     setAddModalVisible(false);
-    setEditItemName('');
-    setEditItemPrice('');
+    setEditItemName("");
+    setEditItemPrice("");
   }
 
   function addQuickService(serviceName) {
     const exists = items.find((i) => i.name === serviceName);
     if (exists) {
-      Alert.alert('Uyari', `${serviceName} zaten ekli.`);
+      Alert.alert("Uyari", `${serviceName} zaten ekli.`);
       return;
     }
     openAddModal(serviceName);
@@ -79,16 +133,17 @@ export default function NewRecordScreen({ navigation, route }) {
 
   async function handleSave() {
     if (!customerName.trim()) {
-      Alert.alert('Uyari', 'Musteri adi giriniz.');
+      Alert.alert("Uyari", "Musteri adi giriniz.");
       return;
     }
     if (!plate.trim()) {
-      Alert.alert('Uyari', 'Arac plakasi giriniz.');
+      Alert.alert("Uyari", "Arac plakasi giriniz.");
       return;
     }
 
     setSaving(true);
     const record = {
+      ...(isEditMode ? { id: editRecord.id } : {}),
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
       plate: plate.trim().toUpperCase(),
@@ -96,47 +151,71 @@ export default function NewRecordScreen({ navigation, route }) {
       model: model.trim(),
       year: year.trim(),
       kilometer: kilometer.trim(),
-      date: getTodayString(),
+      date: isEditMode ? editRecord.date : getTodayString(),
       oilBrand: oilBrand.trim(),
       oilViscosity: oilViscosity.trim(),
-      services: items.map((i) => ({ name: i.name, description: '', price: i.price })),
-      items: items.map((i) => ({ name: i.name, quantity: 1, unitPrice: i.price, total: i.price })),
+      services: items.map((i) => ({
+        name: i.name,
+        description: "",
+        price: i.price,
+      })),
+      items: items.map((i) => ({
+        name: i.name,
+        quantity: 1,
+        unitPrice: i.price,
+        total: i.price,
+      })),
       notes: notes.trim(),
       laborTotal: 0,
       partsTotal: totalAmount,
       totalAmount,
-      status: 'completed',
+      status: "completed",
       paymentStatus,
-      paidAmount: paymentStatus === 'paid' ? totalAmount : paymentStatus === 'partial' ? (parseInt(paidAmount) || 0) : 0,
+      paidAmount:
+        paymentStatus === "paid"
+          ? totalAmount
+          : paymentStatus === "partial"
+            ? parseInt(paidAmount) || 0
+            : 0,
     };
 
-    const saved = await addRecord(record);
+    let success;
+    if (isEditMode) {
+      success = await updateRecord(record);
+    } else {
+      success = await addRecord(record);
+    }
     setSaving(false);
 
-    if (saved) {
-      Alert.alert('Basarili', 'Kayit olusturuldu.', [
-        {
-          text: 'Tamam',
-          onPress: () => {
-            setCustomerName('');
-            setCustomerPhone('');
-            setPlate('');
-            setBrand('');
-            setModel('');
-            setYear('');
-            setKilometer('');
-            setItems([]);
-            setOilBrand('');
-            setOilViscosity('');
-            setNotes('');
-            setPaymentStatus('paid');
-            setPaidAmount('');
-            navigation.navigate('Home');
+    if (success) {
+      posthog?.capture(isEditMode ? "record_updated" : "record_created", {
+        plate: record.plate,
+        total_amount: record.totalAmount,
+        services_count: record.services.length,
+        payment_status: record.paymentStatus,
+      });
+      Alert.alert(
+        "Basarili",
+        isEditMode ? "Kayit guncellendi." : "Kayit olusturuldu.",
+        [
+          {
+            text: "Tamam",
+            onPress: () => {
+              if (isEditMode) {
+                navigation.goBack();
+              } else {
+                clearForm();
+                navigation.navigate("Home");
+              }
+            },
           },
-        },
-      ]);
+        ],
+      );
     } else {
-      Alert.alert('Hata', 'Kayit olusturulamadi.');
+      Alert.alert(
+        "Hata",
+        isEditMode ? "Kayit guncellenemedi." : "Kayit olusturulamadi.",
+      );
     }
   }
 
@@ -144,7 +223,7 @@ export default function NewRecordScreen({ navigation, route }) {
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
           contentContainerStyle={styles.container}
@@ -152,13 +231,40 @@ export default function NewRecordScreen({ navigation, route }) {
           keyboardShouldPersistTaps="handled"
         >
           {/* Header */}
-          <Text style={styles.headerTitle}>{prefill ? 'Yeni Islem Ekle' : 'Yeni Kayit'}</Text>
-          {prefill && (
+          <View style={styles.headerRow}>
+            <Text style={styles.headerTitle}>
+              {isEditMode
+                ? "Kaydi Duzenle"
+                : prefill
+                  ? "Yeni Islem Ekle"
+                  : "Yeni Kayit"}
+            </Text>
+            {!isEditMode && (
+              <TouchableOpacity
+                style={styles.clearBtn}
+                onPress={handleClearForm}
+                activeOpacity={0.6}
+              >
+                <Text style={styles.clearBtnText}>Temizle</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {isEditMode && (
+            <View style={styles.prefillBanner}>
+              <Text style={styles.prefillText}>
+                {editRecord.customerName} - {editRecord.plate}
+              </Text>
+              <Text style={styles.prefillHint}>Kayit duzenleniyor</Text>
+            </View>
+          )}
+          {!isEditMode && prefill && (
             <View style={styles.prefillBanner}>
               <Text style={styles.prefillText}>
                 {prefill.customerName} - {prefill.plate}
               </Text>
-              <Text style={styles.prefillHint}>Musteri bilgileri otomatik dolduruldu</Text>
+              <Text style={styles.prefillHint}>
+                Musteri bilgileri otomatik dolduruldu
+              </Text>
             </View>
           )}
 
@@ -252,7 +358,9 @@ export default function NewRecordScreen({ navigation, route }) {
           {/* Hizli Islem Ekle */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Hizli Islem Ekle</Text>
-            <Text style={styles.sectionHint}>Bir isleme dokunun, fiyatini girin</Text>
+            <Text style={styles.sectionHint}>
+              Bir isleme dokunun, fiyatini girin
+            </Text>
             <View style={styles.chipContainer}>
               {QUICK_SERVICES.map((service) => {
                 const isAdded = items.some((i) => i.name === service);
@@ -264,10 +372,16 @@ export default function NewRecordScreen({ navigation, route }) {
                     activeOpacity={0.6}
                     disabled={isAdded}
                   >
-                    <Text style={[styles.chipPlus, isAdded && styles.chipPlusAdded]}>
-                      {isAdded ? '\u2713' : '+'}
+                    <Text
+                      style={[styles.chipPlus, isAdded && styles.chipPlusAdded]}
+                    >
+                      {isAdded ? "\u2713" : "+"}
                     </Text>
-                    <Text style={[styles.chipText, isAdded && styles.chipTextAdded]}>{service}</Text>
+                    <Text
+                      style={[styles.chipText, isAdded && styles.chipTextAdded]}
+                    >
+                      {service}
+                    </Text>
                   </TouchableOpacity>
                 );
               })}
@@ -279,7 +393,7 @@ export default function NewRecordScreen({ navigation, route }) {
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Eklenen Kalemler</Text>
               <TouchableOpacity
-                onPress={() => openAddModal('')}
+                onPress={() => openAddModal("")}
                 style={styles.addCustomBtn}
                 activeOpacity={0.6}
               >
@@ -295,7 +409,7 @@ export default function NewRecordScreen({ navigation, route }) {
                     <View style={styles.itemPriceRow}>
                       <TextInput
                         style={styles.itemPriceInput}
-                        value={item.price ? String(item.price) : ''}
+                        value={item.price ? String(item.price) : ""}
                         onChangeText={(v) => updateItemPrice(index, v)}
                         keyboardType="number-pad"
                         placeholder="Fiyat"
@@ -362,11 +476,15 @@ export default function NewRecordScreen({ navigation, route }) {
           {items.length > 0 && (
             <View style={styles.totalSection}>
               <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>{items.length} kalem islem</Text>
+                <Text style={styles.totalLabel}>
+                  {items.length} kalem islem
+                </Text>
               </View>
               <View style={styles.grandTotalRow}>
                 <Text style={styles.grandTotalLabel}>TOPLAM TUTAR</Text>
-                <Text style={styles.grandTotalValue}>{formatPrice(totalAmount)} TL</Text>
+                <Text style={styles.grandTotalValue}>
+                  {formatPrice(totalAmount)} TL
+                </Text>
               </View>
             </View>
           )}
@@ -378,14 +496,29 @@ export default function NewRecordScreen({ navigation, route }) {
               <TouchableOpacity
                 style={[
                   styles.paymentOption,
-                  paymentStatus === 'paid' && styles.paymentOptionActive,
-                  paymentStatus === 'paid' && { borderColor: COLORS.green },
+                  paymentStatus === "paid" && styles.paymentOptionActive,
+                  paymentStatus === "paid" && { borderColor: COLORS.green },
                 ]}
-                onPress={() => setPaymentStatus('paid')}
+                onPress={() => setPaymentStatus("paid")}
                 activeOpacity={0.6}
               >
-                <View style={[styles.paymentDot, paymentStatus === 'paid' && { backgroundColor: COLORS.green }]} />
-                <Text style={[styles.paymentOptionText, paymentStatus === 'paid' && { color: COLORS.green, fontWeight: '800' }]}>
+                <View
+                  style={[
+                    styles.paymentDot,
+                    paymentStatus === "paid" && {
+                      backgroundColor: COLORS.green,
+                    },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.paymentOptionText,
+                    paymentStatus === "paid" && {
+                      color: COLORS.green,
+                      fontWeight: "800",
+                    },
+                  ]}
+                >
                   Tahsil Edildi
                 </Text>
               </TouchableOpacity>
@@ -393,14 +526,31 @@ export default function NewRecordScreen({ navigation, route }) {
               <TouchableOpacity
                 style={[
                   styles.paymentOption,
-                  paymentStatus === 'partial' && styles.paymentOptionActive,
-                  paymentStatus === 'partial' && { borderColor: COLORS.warning },
+                  paymentStatus === "partial" && styles.paymentOptionActive,
+                  paymentStatus === "partial" && {
+                    borderColor: COLORS.warning,
+                  },
                 ]}
-                onPress={() => setPaymentStatus('partial')}
+                onPress={() => setPaymentStatus("partial")}
                 activeOpacity={0.6}
               >
-                <View style={[styles.paymentDot, paymentStatus === 'partial' && { backgroundColor: COLORS.warning }]} />
-                <Text style={[styles.paymentOptionText, paymentStatus === 'partial' && { color: COLORS.warning, fontWeight: '800' }]}>
+                <View
+                  style={[
+                    styles.paymentDot,
+                    paymentStatus === "partial" && {
+                      backgroundColor: COLORS.warning,
+                    },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.paymentOptionText,
+                    paymentStatus === "partial" && {
+                      color: COLORS.warning,
+                      fontWeight: "800",
+                    },
+                  ]}
+                >
                   Kismen Tahsil Edildi
                 </Text>
               </TouchableOpacity>
@@ -408,20 +558,35 @@ export default function NewRecordScreen({ navigation, route }) {
               <TouchableOpacity
                 style={[
                   styles.paymentOption,
-                  paymentStatus === 'unpaid' && styles.paymentOptionActive,
-                  paymentStatus === 'unpaid' && { borderColor: COLORS.red },
+                  paymentStatus === "unpaid" && styles.paymentOptionActive,
+                  paymentStatus === "unpaid" && { borderColor: COLORS.red },
                 ]}
-                onPress={() => setPaymentStatus('unpaid')}
+                onPress={() => setPaymentStatus("unpaid")}
                 activeOpacity={0.6}
               >
-                <View style={[styles.paymentDot, paymentStatus === 'unpaid' && { backgroundColor: COLORS.red }]} />
-                <Text style={[styles.paymentOptionText, paymentStatus === 'unpaid' && { color: COLORS.red, fontWeight: '800' }]}>
+                <View
+                  style={[
+                    styles.paymentDot,
+                    paymentStatus === "unpaid" && {
+                      backgroundColor: COLORS.red,
+                    },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.paymentOptionText,
+                    paymentStatus === "unpaid" && {
+                      color: COLORS.red,
+                      fontWeight: "800",
+                    },
+                  ]}
+                >
                   Tahsil Edilecek
                 </Text>
               </TouchableOpacity>
             </View>
 
-            {paymentStatus === 'partial' && (
+            {paymentStatus === "partial" && (
               <View style={styles.partialPaymentBox}>
                 <Text style={styles.label}>TAHSIL EDILEN TUTAR (TL)</Text>
                 <TextInput
@@ -436,7 +601,10 @@ export default function NewRecordScreen({ navigation, route }) {
                   <View style={styles.remainingRow}>
                     <Text style={styles.remainingLabel}>Kalan Tutar:</Text>
                     <Text style={styles.remainingValue}>
-                      {formatPrice(Math.max(0, totalAmount - (parseInt(paidAmount) || 0)))} TL
+                      {formatPrice(
+                        Math.max(0, totalAmount - (parseInt(paidAmount) || 0)),
+                      )}{" "}
+                      TL
                     </Text>
                   </View>
                 )}
@@ -452,7 +620,13 @@ export default function NewRecordScreen({ navigation, route }) {
             activeOpacity={0.7}
           >
             <Text style={styles.saveButtonText}>
-              {saving ? 'Kaydediliyor...' : 'Kaydi Kaydet'}
+              {saving
+                ? isEditMode
+                  ? "Guncelleniyor..."
+                  : "Kaydediliyor..."
+                : isEditMode
+                  ? "Kaydi Guncelle"
+                  : "Kaydi Kaydet"}
             </Text>
           </TouchableOpacity>
 
@@ -462,54 +636,68 @@ export default function NewRecordScreen({ navigation, route }) {
 
       {/* Kalem Ekleme Modali */}
       <Modal visible={addModalVisible} transparent animationType="fade">
-        <TouchableOpacity
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setAddModalVisible(false)}
         >
-          <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Kalem Ekle</Text>
-
-            <Text style={styles.modalLabel}>ISLEM ADI</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Islem adini girin"
-              placeholderTextColor={COLORS.gray}
-              value={editItemName}
-              onChangeText={setEditItemName}
-              autoFocus={!editItemName}
-            />
-
-            <Text style={styles.modalLabel}>FIYAT (TL)</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="0"
-              placeholderTextColor={COLORS.gray}
-              value={editItemPrice}
-              onChangeText={setEditItemPrice}
-              keyboardType="number-pad"
-              autoFocus={!!editItemName}
-            />
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.modalCancel}
-                onPress={() => setAddModalVisible(false)}
-                activeOpacity={0.7}
+          <TouchableOpacity
+            style={styles.modalOverlayInner}
+            activeOpacity={1}
+            onPress={() => setAddModalVisible(false)}
+          >
+            <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+                keyboardShouldPersistTaps="handled"
               >
-                <Text style={styles.modalCancelText}>Vazgec</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalSave, !editItemName.trim() && styles.modalSaveDisabled]}
-                onPress={handleAddItem}
-                disabled={!editItemName.trim()}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.modalSaveText}>Ekle</Text>
-              </TouchableOpacity>
-            </View>
+                <Text style={styles.modalTitle}>Kalem Ekle</Text>
+
+                <Text style={styles.modalLabel}>ISLEM ADI</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Islem adini girin"
+                  placeholderTextColor={COLORS.gray}
+                  value={editItemName}
+                  onChangeText={setEditItemName}
+                  autoFocus={!editItemName}
+                />
+
+                <Text style={styles.modalLabel}>FIYAT (TL)</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="0"
+                  placeholderTextColor={COLORS.gray}
+                  value={editItemPrice}
+                  onChangeText={setEditItemPrice}
+                  keyboardType="number-pad"
+                  autoFocus={!!editItemName}
+                />
+
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={styles.modalCancel}
+                    onPress={() => setAddModalVisible(false)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.modalCancelText}>Vazgec</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.modalSave,
+                      !editItemName.trim() && styles.modalSaveDisabled,
+                    ]}
+                    onPress={handleAddItem}
+                    disabled={!editItemName.trim()}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.modalSaveText}>Ekle</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </TouchableOpacity>
           </TouchableOpacity>
-        </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -525,11 +713,27 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingBottom: 40,
   },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   headerTitle: {
     fontSize: 26,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.text,
     marginTop: 4,
+  },
+  clearBtn: {
+    backgroundColor: COLORS.lightGray,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  clearBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.red,
   },
   prefillBanner: {
     backgroundColor: COLORS.primarySoft,
@@ -540,7 +744,7 @@ const styles = StyleSheet.create({
   },
   prefillText: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.primary,
   },
   prefillHint: {
@@ -554,14 +758,14 @@ const styles = StyleSheet.create({
     padding: 18,
   },
   sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 12,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.text,
     marginBottom: 12,
   },
@@ -573,7 +777,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: "700",
     color: COLORS.textSecondary,
     letterSpacing: 1,
     marginBottom: 6,
@@ -593,7 +797,7 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
   },
   row: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
   },
   halfField: {
@@ -602,14 +806,14 @@ const styles = StyleSheet.create({
 
   // Chip'ler (hizli islem butonlari)
   chipContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
     marginTop: -4,
   },
   chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: COLORS.lightGray,
     borderRadius: 22,
     paddingHorizontal: 16,
@@ -624,19 +828,19 @@ const styles = StyleSheet.create({
   chipPlus: {
     fontSize: 18,
     color: COLORS.primary,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   chipPlusAdded: {
     color: COLORS.green,
   },
   chipText: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: "600",
     color: COLORS.text,
   },
   chipTextAdded: {
     color: COLORS.primary,
-    fontWeight: '700',
+    fontWeight: "700",
   },
 
   // Ozel kalem ekle butonu
@@ -648,14 +852,14 @@ const styles = StyleSheet.create({
   },
   addCustomText: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: "700",
     color: COLORS.primary,
   },
 
   // Eklenen kalem kartlari
   itemCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: COLORS.lightGray,
     borderRadius: 14,
     padding: 14,
@@ -667,13 +871,13 @@ const styles = StyleSheet.create({
   },
   itemName: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
     color: COLORS.text,
     marginBottom: 6,
   },
   itemPriceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   itemPriceInput: {
@@ -682,7 +886,7 @@ const styles = StyleSheet.create({
     height: 44,
     paddingHorizontal: 14,
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: "700",
     color: COLORS.primary,
     minWidth: 100,
     borderWidth: 1,
@@ -690,25 +894,25 @@ const styles = StyleSheet.create({
   },
   itemPriceCurrency: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
     color: COLORS.textSecondary,
   },
   removeBtn: {
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 10,
-    backgroundColor: '#FEE2E2',
+    backgroundColor: "#FEE2E2",
   },
   removeX: {
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.red,
     letterSpacing: 0.5,
   },
   emptyHint: {
     fontSize: 14,
     color: COLORS.textSecondary,
-    textAlign: 'center',
+    textAlign: "center",
     padding: 16,
     marginTop: -6,
   },
@@ -720,9 +924,9 @@ const styles = StyleSheet.create({
     padding: 18,
   },
   totalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingVertical: 4,
   },
   totalLabel: {
@@ -730,9 +934,9 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   grandTotalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginTop: 8,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
@@ -740,13 +944,13 @@ const styles = StyleSheet.create({
   },
   grandTotalLabel: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.text,
     letterSpacing: 1,
   },
   grandTotalValue: {
     fontSize: 28,
-    fontWeight: '900',
+    fontWeight: "900",
     color: COLORS.primary,
   },
 
@@ -755,13 +959,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     height: 60,
     borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   saveButtonText: {
     color: COLORS.white,
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: "800",
   },
 
   // Tahsilat durumu
@@ -769,14 +973,14 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   paymentOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: COLORS.lightGray,
     borderRadius: 16,
     padding: 18,
     gap: 12,
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: "transparent",
   },
   paymentOptionActive: {
     backgroundColor: COLORS.card,
@@ -789,60 +993,63 @@ const styles = StyleSheet.create({
   },
   paymentOptionText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     color: COLORS.text,
   },
   partialPaymentBox: {
     marginTop: 14,
   },
   remainingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginTop: 12,
-    backgroundColor: '#FEF3C7',
+    backgroundColor: "#FEF3C7",
     borderRadius: 12,
     padding: 14,
   },
   remainingLabel: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: "600",
     color: COLORS.text,
   },
   remainingValue: {
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.red,
   },
 
   // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  modalOverlayInner: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
     padding: 24,
   },
   modalContent: {
     backgroundColor: COLORS.card,
     borderRadius: 24,
     padding: 24,
-    width: '100%',
+    width: "100%",
     maxWidth: 400,
   },
   modalTitle: {
     fontSize: 22,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.text,
     marginBottom: 20,
   },
   modalLabel: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: "700",
     color: COLORS.textSecondary,
     letterSpacing: 1,
     marginBottom: 8,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   modalInput: {
     backgroundColor: COLORS.lightGray,
@@ -854,7 +1061,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   modalButtons: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
   },
   modalCancel: {
@@ -862,12 +1069,12 @@ const styles = StyleSheet.create({
     height: 54,
     borderRadius: 14,
     backgroundColor: COLORS.lightGray,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   modalCancelText: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
     color: COLORS.text,
   },
   modalSave: {
@@ -875,15 +1082,15 @@ const styles = StyleSheet.create({
     height: 54,
     borderRadius: 14,
     backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   modalSaveDisabled: {
     opacity: 0.4,
   },
   modalSaveText: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.white,
   },
 });

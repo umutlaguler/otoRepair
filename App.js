@@ -1,16 +1,24 @@
-import 'react-native-gesture-handler';
-import React, { useEffect, useState } from 'react';
-import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { registerRootComponent } from 'expo';
-import RootNavigator from './src/navigation/RootNavigator';
-import { initializeStorage } from './src/storage/recordStorage';
-import { requestNotificationPermissions } from './src/utils/notifications';
+import { registerRootComponent } from "expo";
+import Constants from "expo-constants";
+import { StatusBar } from "expo-status-bar";
+import { PostHogProvider } from "posthog-react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
+import "react-native-gesture-handler";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import RootNavigator from "./src/navigation/RootNavigator";
+import TrialExpiredScreen from "./src/screens/TrialExpiredScreen";
+import { initializeStorage } from "./src/storage/recordStorage";
+import { requestNotificationPermissions } from "./src/utils/notifications";
+import useTrial from "./src/utils/useTrial";
 
-function App() {
+const POSTHOG_API_KEY = Constants.expoConfig?.extra?.posthogApiKey;
+const POSTHOG_HOST = Constants.expoConfig?.extra?.posthogHost;
+
+function AppContent() {
   const [ready, setReady] = useState(false);
+  const { loading: trialLoading, expired } = useTrial();
 
   useEffect(() => {
     async function init() {
@@ -21,11 +29,22 @@ function App() {
     init();
   }, []);
 
-  if (!ready) {
+  // Herhangi bir kontrol devam ediyorsa loading goster
+  if (!ready || trialLoading) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" color="#0D47A1" />
       </View>
+    );
+  }
+
+  // Deneme suresi dolduysa kilit ekrani goster
+  if (expired) {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <TrialExpiredScreen />
+      </SafeAreaProvider>
     );
   }
 
@@ -39,12 +58,35 @@ function App() {
   );
 }
 
+function App() {
+  // PostHog API key yoksa provider'siz calistir (crash onleme)
+  if (!POSTHOG_API_KEY) {
+    return <AppContent />;
+  }
+
+  return (
+    <PostHogProvider
+      apiKey={POSTHOG_API_KEY}
+      options={{
+        host: POSTHOG_HOST,
+      }}
+      autocapture={{
+        captureTouches: true,
+        captureLifecycleEvents: true,
+        captureScreens: false,
+      }}
+    >
+      <AppContent />
+    </PostHogProvider>
+  );
+}
+
 const styles = StyleSheet.create({
   loading: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F5F3F1',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F5F3F1",
   },
 });
 

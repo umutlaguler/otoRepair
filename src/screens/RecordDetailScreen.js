@@ -1,63 +1,84 @@
-import React, { useState, useCallback } from 'react';
+import { useFocusEffect } from "@react-navigation/native";
+import { usePostHog } from "posthog-react-native";
+import { useCallback, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
   ScrollView,
+  StyleSheet,
+  Text,
   TouchableOpacity,
-  Alert,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
-import { COLORS } from '../constants/colors';
-import { formatDateShort } from '../utils/date';
-import { formatDateCompact } from '../utils/date';
-import { formatPrice } from '../utils/currency';
-import { getRecordsByPlate } from '../storage/recordStorage';
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { COLORS } from "../constants/colors";
+import { getRecordById, getRecordsByPlate } from "../storage/recordStorage";
+import { formatPrice } from "../utils/currency";
+import { formatDateCompact, formatDateShort } from "../utils/date";
 
 function getPaymentLabel(status) {
   switch (status) {
-    case 'paid': return 'Tahsil Edildi';
-    case 'partial': return 'Kismen Tahsil Edildi';
-    case 'unpaid': return 'Tahsil Edilecek';
-    default: return 'Belirsiz';
+    case "paid":
+      return "Tahsil Edildi";
+    case "partial":
+      return "Kismen Tahsil Edildi";
+    case "unpaid":
+      return "Tahsil Edilecek";
+    default:
+      return "Belirsiz";
   }
 }
 
 function getPaymentColor(status) {
   switch (status) {
-    case 'paid': return '#16A34A';
-    case 'partial': return '#D97706';
-    case 'unpaid': return '#DC2626';
-    default: return '#6B7280';
+    case "paid":
+      return "#16A34A";
+    case "partial":
+      return "#D97706";
+    case "unpaid":
+      return "#DC2626";
+    default:
+      return "#6B7280";
   }
 }
 
 function getPaymentBg(status) {
   switch (status) {
-    case 'paid': return '#DCFCE7';
-    case 'partial': return '#FEF3C7';
-    case 'unpaid': return '#FEE2E2';
-    default: return '#F3F4F6';
+    case "paid":
+      return "#DCFCE7";
+    case "partial":
+      return "#FEF3C7";
+    case "unpaid":
+      return "#FEE2E2";
+    default:
+      return "#F3F4F6";
   }
 }
 
 export default function RecordDetailScreen({ navigation, route }) {
-  const record = route?.params?.record;
+  const initialRecord = route?.params?.record;
+  const [record, setRecord] = useState(initialRecord);
   const [pastRecords, setPastRecords] = useState([]);
+  const posthog = usePostHog();
 
   useFocusEffect(
     useCallback(() => {
-      if (record?.plate) {
-        loadPastRecords();
+      if (initialRecord?.id) {
+        refreshRecord();
+        posthog?.screen("RecordDetailScreen", { plate: initialRecord.plate });
       }
-    }, [record?.plate])
+    }, [initialRecord?.id]),
   );
 
-  async function loadPastRecords() {
-    const all = await getRecordsByPlate(record.plate);
-    // Mevcut kaydi cikar, sadece diger kayitlari goster
-    setPastRecords(all.filter((r) => r.id !== record.id));
+  async function refreshRecord() {
+    const fresh = await getRecordById(initialRecord.id);
+    if (fresh) {
+      setRecord(fresh);
+      loadPastRecords(fresh.plate, fresh.id);
+    }
+  }
+
+  async function loadPastRecords(plate, currentId) {
+    const all = await getRecordsByPlate(plate);
+    setPastRecords(all.filter((r) => r.id !== currentId));
   }
 
   if (!record) {
@@ -78,12 +99,12 @@ export default function RecordDetailScreen({ navigation, route }) {
   }
 
   function handleEdit() {
-    Alert.alert('Duzenleme', 'Bu ozellik yakin zamanda eklenecek.');
+    navigation.navigate("EditRecord", { editRecord: record });
   }
 
   function handleNewRecord() {
-    navigation.navigate('MainTabs', {
-      screen: 'NewRecord',
+    navigation.navigate("MainTabs", {
+      screen: "NewRecord",
       params: {
         prefillCustomer: {
           customerName: record.customerName,
@@ -110,7 +131,7 @@ export default function RecordDetailScreen({ navigation, route }) {
             style={styles.backBtn}
             activeOpacity={0.6}
           >
-            <Text style={styles.backArrow}>{'<'}</Text>
+            <Text style={styles.backArrow}>{"<"}</Text>
             <Text style={styles.backText}>Geri</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Kayit Detayi</Text>
@@ -149,7 +170,9 @@ export default function RecordDetailScreen({ navigation, route }) {
                   <View style={styles.serviceInfo}>
                     <Text style={styles.serviceName}>{service.name}</Text>
                     {service.description ? (
-                      <Text style={styles.serviceDesc}>{service.description}</Text>
+                      <Text style={styles.serviceDesc}>
+                        {service.description}
+                      </Text>
                     ) : null}
                   </View>
                 </View>
@@ -183,31 +206,58 @@ export default function RecordDetailScreen({ navigation, route }) {
         {/* Tahsilat Durumu */}
         <View style={styles.paymentSection}>
           <Text style={styles.paymentSectionLabel}>TAHSILAT DURUMU</Text>
-          <View style={[styles.paymentStatusBox, { backgroundColor: getPaymentBg(record.paymentStatus) }]}>
-            <View style={[styles.paymentStatusDot, { backgroundColor: getPaymentColor(record.paymentStatus) }]} />
-            <Text style={[styles.paymentStatusText, { color: getPaymentColor(record.paymentStatus) }]}>
+          <View
+            style={[
+              styles.paymentStatusBox,
+              { backgroundColor: getPaymentBg(record.paymentStatus) },
+            ]}
+          >
+            <View
+              style={[
+                styles.paymentStatusDot,
+                { backgroundColor: getPaymentColor(record.paymentStatus) },
+              ]}
+            />
+            <Text
+              style={[
+                styles.paymentStatusText,
+                { color: getPaymentColor(record.paymentStatus) },
+              ]}
+            >
               {getPaymentLabel(record.paymentStatus)}
             </Text>
           </View>
-          {record.paymentStatus === 'partial' && (
+          {record.paymentStatus === "partial" && (
             <View style={styles.paymentDetails}>
               <View style={styles.paymentDetailRow}>
                 <Text style={styles.paymentDetailLabel}>Tahsil Edilen</Text>
-                <Text style={styles.paymentDetailValue}>{formatPrice(record.paidAmount || 0)} TL</Text>
+                <Text style={styles.paymentDetailValue}>
+                  {formatPrice(record.paidAmount || 0)} TL
+                </Text>
               </View>
               <View style={styles.paymentDetailRow}>
                 <Text style={styles.paymentDetailLabel}>Kalan Tutar</Text>
-                <Text style={[styles.paymentDetailValue, { color: COLORS.red }]}>
-                  {formatPrice(Math.max(0, (record.totalAmount || 0) - (record.paidAmount || 0)))} TL
+                <Text
+                  style={[styles.paymentDetailValue, { color: COLORS.red }]}
+                >
+                  {formatPrice(
+                    Math.max(
+                      0,
+                      (record.totalAmount || 0) - (record.paidAmount || 0),
+                    ),
+                  )}{" "}
+                  TL
                 </Text>
               </View>
             </View>
           )}
-          {record.paymentStatus === 'unpaid' && (
+          {record.paymentStatus === "unpaid" && (
             <View style={styles.paymentDetails}>
               <View style={styles.paymentDetailRow}>
                 <Text style={styles.paymentDetailLabel}>Bekleyen Tutar</Text>
-                <Text style={[styles.paymentDetailValue, { color: COLORS.red }]}>
+                <Text
+                  style={[styles.paymentDetailValue, { color: COLORS.red }]}
+                >
                   {formatPrice(record.totalAmount || 0)} TL
                 </Text>
               </View>
@@ -219,23 +269,31 @@ export default function RecordDetailScreen({ navigation, route }) {
         {pastRecords.length > 0 && (
           <View style={styles.pastSection}>
             <Text style={styles.pastTitle}>Bu Aracin Gecmis Kayitlari</Text>
-            <Text style={styles.pastSubtitle}>{pastRecords.length} onceki islem</Text>
+            <Text style={styles.pastSubtitle}>
+              {pastRecords.length} onceki islem
+            </Text>
             {pastRecords.map((past) => (
               <TouchableOpacity
                 key={past.id}
                 style={styles.pastCard}
-                onPress={() => navigation.push('RecordDetail', { record: past })}
+                onPress={() =>
+                  navigation.push("RecordDetail", { record: past })
+                }
                 activeOpacity={0.6}
               >
                 <View style={styles.pastCardLeft}>
-                  <Text style={styles.pastDate}>{formatDateCompact(past.date)}</Text>
+                  <Text style={styles.pastDate}>
+                    {formatDateCompact(past.date)}
+                  </Text>
                   <Text style={styles.pastServices} numberOfLines={1}>
                     {past.services && past.services.length > 0
-                      ? past.services.map((s) => s.name).join(', ')
-                      : 'Islem bilgisi yok'}
+                      ? past.services.map((s) => s.name).join(", ")
+                      : "Islem bilgisi yok"}
                   </Text>
                 </View>
-                <Text style={styles.pastPrice}>{formatPrice(past.totalAmount)} TL</Text>
+                <Text style={styles.pastPrice}>
+                  {formatPrice(past.totalAmount)} TL
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -278,8 +336,8 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     gap: 16,
   },
   errorText: {
@@ -295,18 +353,18 @@ const styles = StyleSheet.create({
   errorButtonText: {
     color: COLORS.white,
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
   },
 
   // Header
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   backBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
     paddingVertical: 8,
     paddingRight: 12,
@@ -314,16 +372,16 @@ const styles = StyleSheet.create({
   backArrow: {
     fontSize: 22,
     color: COLORS.primary,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   backText: {
     fontSize: 16,
     color: COLORS.primary,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   headerTitle: {
     fontSize: 22,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.text,
   },
 
@@ -332,7 +390,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.card,
     borderRadius: 20,
     padding: 24,
-    alignItems: 'center',
+    alignItems: "center",
   },
   plateBadge: {
     backgroundColor: COLORS.peach,
@@ -343,19 +401,19 @@ const styles = StyleSheet.create({
   },
   plateBadgeText: {
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.peachDark,
     letterSpacing: 1.5,
   },
   plateText: {
     fontSize: 36,
-    fontWeight: '900',
+    fontWeight: "900",
     color: COLORS.primary,
     letterSpacing: 2,
   },
   customerName: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: "700",
     color: COLORS.text,
     marginTop: 10,
   },
@@ -373,13 +431,13 @@ const styles = StyleSheet.create({
   },
   oilLabel: {
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.peachDark,
     letterSpacing: 1,
   },
   oilValue: {
     fontSize: 22,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.peachDark,
     marginTop: 4,
   },
@@ -387,7 +445,7 @@ const styles = StyleSheet.create({
   // Section
   sectionTitle: {
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.text,
     letterSpacing: 1,
     marginTop: 4,
@@ -398,13 +456,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.card,
     borderRadius: 16,
     padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   serviceLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
     gap: 12,
   },
@@ -419,7 +477,7 @@ const styles = StyleSheet.create({
   },
   serviceName: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
     color: COLORS.text,
   },
   serviceDesc: {
@@ -429,7 +487,7 @@ const styles = StyleSheet.create({
   },
   servicePrice: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.primary,
     marginLeft: 8,
   },
@@ -442,7 +500,7 @@ const styles = StyleSheet.create({
   },
   noteLabel: {
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.primary,
     letterSpacing: 1,
     marginBottom: 10,
@@ -451,7 +509,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 24,
     color: COLORS.text,
-    fontStyle: 'italic',
+    fontStyle: "italic",
   },
 
   // Total
@@ -461,13 +519,13 @@ const styles = StyleSheet.create({
   totalDivider: {
     borderTopWidth: 2,
     borderTopColor: COLORS.border,
-    borderStyle: 'dashed',
+    borderStyle: "dashed",
     marginBottom: 16,
   },
   totalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   totalLabel: {
     fontSize: 18,
@@ -475,13 +533,13 @@ const styles = StyleSheet.create({
   },
   totalPrice: {
     fontSize: 34,
-    fontWeight: '900',
+    fontWeight: "900",
     color: COLORS.primary,
   },
 
   // Buttons
   buttonRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
   },
   secondaryBtn: {
@@ -489,12 +547,12 @@ const styles = StyleSheet.create({
     height: 58,
     borderRadius: 16,
     backgroundColor: COLORS.graySoft,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   secondaryBtnText: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.text,
   },
   primaryBtn: {
@@ -502,12 +560,12 @@ const styles = StyleSheet.create({
     height: 58,
     borderRadius: 16,
     backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   primaryBtnText: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.white,
   },
 
@@ -519,14 +577,14 @@ const styles = StyleSheet.create({
   },
   paymentSectionLabel: {
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.textSecondary,
     letterSpacing: 1,
     marginBottom: 12,
   },
   paymentStatusBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     borderRadius: 14,
     padding: 16,
     gap: 10,
@@ -538,25 +596,25 @@ const styles = StyleSheet.create({
   },
   paymentStatusText: {
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   paymentDetails: {
     marginTop: 14,
     gap: 8,
   },
   paymentDetailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   paymentDetailLabel: {
     fontSize: 15,
     color: COLORS.textSecondary,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   paymentDetailValue: {
     fontSize: 17,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.text,
   },
 
@@ -568,7 +626,7 @@ const styles = StyleSheet.create({
   },
   pastTitle: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.text,
     marginBottom: 4,
   },
@@ -578,9 +636,9 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   pastCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: COLORS.lightGray,
     borderRadius: 14,
     padding: 16,
@@ -594,7 +652,7 @@ const styles = StyleSheet.create({
   },
   pastDate: {
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.primary,
   },
   pastServices: {
@@ -604,7 +662,7 @@ const styles = StyleSheet.create({
   },
   pastPrice: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.orange,
   },
 });

@@ -1,27 +1,42 @@
-import { Platform } from 'react-native';
+import Constants from "expo-constants";
+import { Platform } from "react-native";
 
 let Notifications = null;
 
-// expo-notifications sadece native platformlarda calisir
-// Web ve Expo Go'da native module yok, hata vermemesi icin kontrol ediyoruz
+// Expo Go ortaminda mi calistigini kontrol et
+function isExpoGo() {
+  try {
+    const appOwnership = Constants.executionEnvironment;
+    return appOwnership === "storeClient";
+  } catch {
+    return true;
+  }
+}
+
+// expo-notifications sadece development build veya standalone'da calisir
+// Expo Go'da SDK 53+ ile Android push destegi kaldirildi
 function isNotificationsAvailable() {
-  return Platform.OS !== 'web' && Notifications !== null;
+  if (Platform.OS === "web") return false;
+  if (isExpoGo()) return false;
+  return Notifications !== null;
 }
 
 // Module'u guvenli sekilde yukle
 try {
-  Notifications = require('expo-notifications');
-  if (isNotificationsAvailable()) {
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-      }),
-    });
+  if (!isExpoGo()) {
+    Notifications = require("expo-notifications");
+    if (isNotificationsAvailable()) {
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: false,
+        }),
+      });
+    }
   }
 } catch (e) {
-  console.log('expo-notifications yuklenemedi (web veya Expo Go ortami).');
+  // Sessizce devam et — Expo Go veya desteklenmeyen ortam
   Notifications = null;
 }
 
@@ -30,37 +45,37 @@ try {
  */
 export async function requestNotificationPermissions() {
   if (!isNotificationsAvailable()) {
-    console.log('Bildirimler bu platformda desteklenmiyor.');
     return false;
   }
 
   try {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    const { status: existingStatus } =
+      await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
-    if (existingStatus !== 'granted') {
+    if (existingStatus !== "granted") {
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }
 
-    if (finalStatus !== 'granted') {
-      console.log('Bildirim izni verilmedi.');
+    if (finalStatus !== "granted") {
+      console.log("Bildirim izni verilmedi.");
       return false;
     }
 
     // Android icin bildirim kanali olustur
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('appointments', {
-        name: 'Randevu Bildirimleri',
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync("appointments", {
+        name: "Randevu Bildirimleri",
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250, 250, 250],
-        sound: 'default',
+        sound: "default",
       });
     }
 
     return true;
   } catch (error) {
-    console.error('Bildirim izni hatasi:', error);
+    console.error("Bildirim izni hatasi:", error);
     return false;
   }
 }
@@ -72,13 +87,18 @@ export async function requestNotificationPermissions() {
  * customerName: "Ahmet Yilmaz"
  * appointmentId: benzersiz ID
  */
-export async function scheduleAppointmentNotification(dateStr, time, customerName, appointmentId) {
+export async function scheduleAppointmentNotification(
+  dateStr,
+  time,
+  customerName,
+  appointmentId,
+) {
   if (!isNotificationsAvailable()) return null;
 
   try {
     // Randevu tarih/saat objesini olustur
-    const [year, month, day] = dateStr.split('-').map(Number);
-    const [hour, minute] = time.split(':').map(Number);
+    const [year, month, day] = dateStr.split("-").map(Number);
+    const [hour, minute] = time.split(":").map(Number);
 
     const appointmentDate = new Date(year, month - 1, day, hour, minute, 0);
 
@@ -87,30 +107,34 @@ export async function scheduleAppointmentNotification(dateStr, time, customerNam
 
     // Eger bildirim zamani gecmisse, zamanlama
     if (notifyDate.getTime() <= Date.now()) {
-      console.log('Bildirim zamani gecmis, zamanlanmadi.');
+      console.log("Bildirim zamani gecmis, zamanlanmadi.");
       return null;
     }
 
-    const secondsUntilNotify = Math.floor((notifyDate.getTime() - Date.now()) / 1000);
+    const secondsUntilNotify = Math.floor(
+      (notifyDate.getTime() - Date.now()) / 1000,
+    );
 
     const notificationId = await Notifications.scheduleNotificationAsync({
       content: {
-        title: 'Randevu Hatirlatma',
+        title: "Randevu Hatirlatma",
         body: `${customerName} - Saat ${time} randevunuz 30 dakika sonra!`,
         data: { appointmentId, dateStr, time },
-        ...(Platform.OS === 'android' ? { channelId: 'appointments' } : {}),
+        ...(Platform.OS === "android" ? { channelId: "appointments" } : {}),
       },
       trigger: {
-        type: 'timeInterval',
+        type: "timeInterval",
         seconds: secondsUntilNotify,
         repeats: false,
       },
     });
 
-    console.log(`Bildirim zamanlandi: ${notificationId} - ${secondsUntilNotify}sn sonra`);
+    console.log(
+      `Bildirim zamanlandi: ${notificationId} - ${secondsUntilNotify}sn sonra`,
+    );
     return notificationId;
   } catch (error) {
-    console.error('Bildirim zamanlama hatasi:', error);
+    console.error("Bildirim zamanlama hatasi:", error);
     return null;
   }
 }
@@ -126,7 +150,7 @@ export async function cancelNotification(notificationId) {
       await Notifications.cancelScheduledNotificationAsync(notificationId);
     }
   } catch (error) {
-    console.error('Bildirim iptal hatasi:', error);
+    console.error("Bildirim iptal hatasi:", error);
   }
 }
 
@@ -139,6 +163,6 @@ export async function cancelAllNotifications() {
   try {
     await Notifications.cancelAllScheduledNotificationsAsync();
   } catch (error) {
-    console.error('Tum bildirimler iptal hatasi:', error);
+    console.error("Tum bildirimler iptal hatasi:", error);
   }
 }
