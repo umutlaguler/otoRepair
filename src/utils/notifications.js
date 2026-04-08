@@ -100,7 +100,7 @@ export async function scheduleAppointmentNotification(
     const [year, month, day] = dateStr.split("-").map(Number);
     const [hour, minute] = time.split(":").map(Number);
 
-    const appointmentDate = new Date(year, month - 1, day, hour, minute, 0);
+    const appointmentDate = new Date(year, month - 1, day, hour, minute, 0, 0);
 
     // 30 dakika oncesini hesapla
     const notifyDate = new Date(appointmentDate.getTime() - 30 * 60 * 1000);
@@ -111,26 +111,25 @@ export async function scheduleAppointmentNotification(
       return null;
     }
 
-    const secondsUntilNotify = Math.floor(
-      (notifyDate.getTime() - Date.now()) / 1000,
-    );
+    const notifyHour = String(notifyDate.getHours()).padStart(2, "0");
+    const notifyMinute = String(notifyDate.getMinutes()).padStart(2, "0");
 
     const notificationId = await Notifications.scheduleNotificationAsync({
       content: {
-        title: "Randevu Hatirlatma",
-        body: `${customerName} - Saat ${time} randevunuz 30 dakika sonra!`,
+        title: "Randevu Hatirlatma ⏰",
+        body: `${customerName} - Saat ${time} randevunuza 30 dakika kaldi!`,
         data: { appointmentId, dateStr, time },
         ...(Platform.OS === "android" ? { channelId: "appointments" } : {}),
       },
       trigger: {
-        type: "timeInterval",
-        seconds: secondsUntilNotify,
-        repeats: false,
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: notifyDate,
+        ...(Platform.OS === "android" ? { channelId: "appointments" } : {}),
       },
     });
 
     console.log(
-      `Bildirim zamanlandi: ${notificationId} - ${secondsUntilNotify}sn sonra`,
+      `Bildirim zamanlandi: ${notificationId} - ${notifyHour}:${notifyMinute}'de tetiklenecek (randevu: ${time})`,
     );
     return notificationId;
   } catch (error) {

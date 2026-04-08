@@ -6,7 +6,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import DaySchedule from "../components/DaySchedule";
@@ -84,6 +84,7 @@ export default function HomeScreen({ navigation }) {
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* Baslik */}
         <Text style={styles.headerTitle}>AL-AZ OTOMOTIV</Text>

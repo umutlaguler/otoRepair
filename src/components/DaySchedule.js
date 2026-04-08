@@ -2,6 +2,7 @@ import { usePostHog } from "posthog-react-native";
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -10,6 +11,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { COLORS } from "../constants/colors";
@@ -110,6 +112,7 @@ export default function DaySchedule() {
 
   async function handleAddAppointment() {
     if (!newName.trim()) return;
+    Keyboard.dismiss();
     await addAppointment(dateStr, {
       customerName: newName.trim(),
       time: selectedHour,
@@ -276,89 +279,95 @@ export default function DaySchedule() {
 
       {/* Randevu ekleme modali */}
       <Modal visible={modalVisible} transparent animationType="fade">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.modalOverlay}
+        <TouchableWithoutFeedback
+          onPress={() => {
+            Keyboard.dismiss();
+            setModalVisible(false);
+          }}
         >
-          <TouchableOpacity
-            style={styles.modalOverlayInner}
-            activeOpacity={1}
-            onPress={() => setModalVisible(false)}
-          >
-            <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
-              <ScrollView
-                showsVerticalScrollIndicator={false}
-                bounces={false}
-                keyboardShouldPersistTaps="handled"
-              >
-                <Text style={styles.modalTitle}>Randevu Ekle</Text>
-                <Text style={styles.modalSubtitle}>
-                  {getDateLabel(dayOffset)}
-                </Text>
+          <View style={styles.modalOverlay}>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === "ios" ? "padding" : "height"}
+              style={styles.modalOverlayInner}
+            >
+              <TouchableWithoutFeedback onPress={() => {}}>
+                <View style={styles.modalContent}>
+                  <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    bounces={false}
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    <Text style={styles.modalTitle}>Randevu Ekle</Text>
+                    <Text style={styles.modalSubtitle}>
+                      {getDateLabel(dayOffset)}
+                    </Text>
 
-                <Text style={styles.modalLabel}>Musteri Adi</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  placeholder="Ad Soyad"
-                  placeholderTextColor={COLORS.gray}
-                  value={newName}
-                  onChangeText={setNewName}
-                  autoFocus
-                />
+                    <Text style={styles.modalLabel}>Musteri Adi</Text>
+                    <TextInput
+                      style={styles.modalInput}
+                      placeholder="Ad Soyad"
+                      placeholderTextColor={COLORS.gray}
+                      value={newName}
+                      onChangeText={setNewName}
+                      autoFocus
+                    />
 
-                <Text style={styles.modalLabel}>Saat</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.hourPicker}
-                  keyboardShouldPersistTaps="handled"
-                >
-                  {WORK_HOURS.map((hour) => (
-                    <TouchableOpacity
-                      key={hour}
-                      style={[
-                        styles.hourChip,
-                        selectedHour === hour && styles.hourChipActive,
-                      ]}
-                      onPress={() => setSelectedHour(hour)}
-                      activeOpacity={0.7}
+                    <Text style={styles.modalLabel}>Saat</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.hourPicker}
+                      keyboardShouldPersistTaps="handled"
                     >
-                      <Text
-                        style={[
-                          styles.hourChipText,
-                          selectedHour === hour && styles.hourChipTextActive,
-                        ]}
-                      >
-                        {hour}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
+                      {WORK_HOURS.map((hour) => (
+                        <TouchableOpacity
+                          key={hour}
+                          style={[
+                            styles.hourChip,
+                            selectedHour === hour && styles.hourChipActive,
+                          ]}
+                          onPress={() => setSelectedHour(hour)}
+                          activeOpacity={0.7}
+                        >
+                          <Text
+                            style={[
+                              styles.hourChipText,
+                              selectedHour === hour &&
+                                styles.hourChipTextActive,
+                            ]}
+                          >
+                            {hour}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
 
-                <View style={styles.modalButtons}>
-                  <TouchableOpacity
-                    style={styles.modalCancel}
-                    onPress={() => setModalVisible(false)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.modalCancelText}>Vazgec</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.modalSave,
-                      !newName.trim() && styles.modalSaveDisabled,
-                    ]}
-                    onPress={handleAddAppointment}
-                    disabled={!newName.trim()}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.modalSaveText}>Ekle</Text>
-                  </TouchableOpacity>
+                    <View style={styles.modalButtons}>
+                      <TouchableOpacity
+                        style={styles.modalCancel}
+                        onPress={() => setModalVisible(false)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.modalCancelText}>Vazgec</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.modalSave,
+                          !newName.trim() && styles.modalSaveDisabled,
+                        ]}
+                        onPress={handleAddAppointment}
+                        disabled={!newName.trim()}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.modalSaveText}>Ekle</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </ScrollView>
                 </View>
-              </ScrollView>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </KeyboardAvoidingView>
+              </TouchableWithoutFeedback>
+            </KeyboardAvoidingView>
+          </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </View>
   );

@@ -1,7 +1,8 @@
 import { usePostHog } from "posthog-react-native";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -10,6 +11,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -219,13 +221,16 @@ export default function NewRecordScreen({ navigation, route }) {
     }
   }
 
+  const scrollViewRef = useRef(null);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <ScrollView
+          ref={scrollViewRef}
           contentContainerStyle={styles.container}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -596,6 +601,11 @@ export default function NewRecordScreen({ navigation, route }) {
                   value={paidAmount}
                   onChangeText={setPaidAmount}
                   keyboardType="number-pad"
+                  onFocus={() => {
+                    setTimeout(() => {
+                      scrollViewRef.current?.scrollToEnd({ animated: true });
+                    }, 300);
+                  }}
                 />
                 {totalAmount > 0 && (parseInt(paidAmount) || 0) > 0 && (
                   <View style={styles.remainingRow}>
@@ -636,68 +646,73 @@ export default function NewRecordScreen({ navigation, route }) {
 
       {/* Kalem Ekleme Modali */}
       <Modal visible={addModalVisible} transparent animationType="fade">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.modalOverlay}
+        <TouchableWithoutFeedback
+          onPress={() => {
+            Keyboard.dismiss();
+            setAddModalVisible(false);
+          }}
         >
-          <TouchableOpacity
-            style={styles.modalOverlayInner}
-            activeOpacity={1}
-            onPress={() => setAddModalVisible(false)}
-          >
-            <TouchableOpacity activeOpacity={1} style={styles.modalContent}>
-              <ScrollView
-                showsVerticalScrollIndicator={false}
-                bounces={false}
-                keyboardShouldPersistTaps="handled"
-              >
-                <Text style={styles.modalTitle}>Kalem Ekle</Text>
-
-                <Text style={styles.modalLabel}>ISLEM ADI</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  placeholder="Islem adini girin"
-                  placeholderTextColor={COLORS.gray}
-                  value={editItemName}
-                  onChangeText={setEditItemName}
-                  autoFocus={!editItemName}
-                />
-
-                <Text style={styles.modalLabel}>FIYAT (TL)</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  placeholder="0"
-                  placeholderTextColor={COLORS.gray}
-                  value={editItemPrice}
-                  onChangeText={setEditItemPrice}
-                  keyboardType="number-pad"
-                  autoFocus={!!editItemName}
-                />
-
-                <View style={styles.modalButtons}>
-                  <TouchableOpacity
-                    style={styles.modalCancel}
-                    onPress={() => setAddModalVisible(false)}
-                    activeOpacity={0.7}
+          <View style={styles.modalOverlay}>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === "ios" ? "padding" : "height"}
+              style={styles.modalOverlayInner}
+            >
+              <TouchableWithoutFeedback onPress={() => {}}>
+                <View style={styles.modalContent}>
+                  <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    bounces={false}
+                    keyboardShouldPersistTaps="handled"
                   >
-                    <Text style={styles.modalCancelText}>Vazgec</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.modalSave,
-                      !editItemName.trim() && styles.modalSaveDisabled,
-                    ]}
-                    onPress={handleAddItem}
-                    disabled={!editItemName.trim()}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.modalSaveText}>Ekle</Text>
-                  </TouchableOpacity>
+                    <Text style={styles.modalTitle}>Kalem Ekle</Text>
+
+                    <Text style={styles.modalLabel}>ISLEM ADI</Text>
+                    <TextInput
+                      style={styles.modalInput}
+                      placeholder="Islem adini girin"
+                      placeholderTextColor={COLORS.gray}
+                      value={editItemName}
+                      onChangeText={setEditItemName}
+                      autoFocus={!editItemName}
+                    />
+
+                    <Text style={styles.modalLabel}>FIYAT (TL)</Text>
+                    <TextInput
+                      style={styles.modalInput}
+                      placeholder="0"
+                      placeholderTextColor={COLORS.gray}
+                      value={editItemPrice}
+                      onChangeText={setEditItemPrice}
+                      keyboardType="number-pad"
+                      autoFocus={!!editItemName}
+                    />
+
+                    <View style={styles.modalButtons}>
+                      <TouchableOpacity
+                        style={styles.modalCancel}
+                        onPress={() => setAddModalVisible(false)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.modalCancelText}>Vazgec</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.modalSave,
+                          !editItemName.trim() && styles.modalSaveDisabled,
+                        ]}
+                        onPress={handleAddItem}
+                        disabled={!editItemName.trim()}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.modalSaveText}>Ekle</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </ScrollView>
                 </View>
-              </ScrollView>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </KeyboardAvoidingView>
+              </TouchableWithoutFeedback>
+            </KeyboardAvoidingView>
+          </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </SafeAreaView>
   );
